@@ -9,3 +9,7 @@ RUN npm install --only=development
 COPY . .
 
 RUN npm run build
+
+RUN npx prisma generate
+
+CMD ["npx", "prisma", "db", "push"]

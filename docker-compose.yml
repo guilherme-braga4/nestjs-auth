@@ -3,8 +3,6 @@ services:
   dev:
     container_name: "nestjs-auth-c"
     image: "nestjs-auth-i"
-    environment:
-      - development
     build:
       context: ./
       dockerfile: Dockerfile
@@ -14,7 +12,7 @@ services:
     ports:
       - 3000:3000
     networks:
-      - nesjs-network
+      - nestjs-network
     volumes:
       - ./app:/usr/app
       - /usr/app/node_modules
@@ -31,6 +29,8 @@ services:
       - '3306:3306'
     expose:
       - '3306'
+    networks:
+      - nestjs-network
     volumes:
       - nest-auth-db:/var/lib/mysql
 
@@ -38,4 +38,4 @@ volumes:
   nest-auth-db:
 
 networks:
-  nesjs-network:
+  nestjs-network:
