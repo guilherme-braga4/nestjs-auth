@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  dev:
+    container_name: "nestjs-auth-c"
+    image: "nestjs-auth-i"
+    environment:
+      - development
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    entrypoint: ["npm", "run", "start:dev"]
+    env_file:
+      - .env
+    ports:
+      - 3000:3000
+    networks:
+      - nesjs-network
+    volumes:
+      - ./app:/usr/app
+      - /usr/app/node_modules
+    restart: unless-stopped
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'nest-auth-db'
+      MYSQL_USER: 'guidev'
+      MYSQL_PASSWORD: '123'
+      MYSQL_ROOT_PASSWORD: 'root'
+    ports:
+      - '3306:3306'
+    expose:
+      - '3306'
+    volumes:
+      - nest-auth-db:/var/lib/mysql
+
+volumes:
+  nest-auth-db:
+
+networks:
+  nesjs-network:
