@@ -14,8 +14,18 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async signIn({ email }: LoginDto): Promise<any> {
-    const { id, email: _email } = await this.usersService.findOne(email);
+  async signIn({ email, password }: LoginDto): Promise<any> {
+    const {
+      id,
+      name: _name,
+      email: _email,
+      password: _password,
+    } = await this.usersService.findOne(email);
+
+    //Compara as senha criptografada recebida com a senha criptografada do DB
+    if (password !== _password) {
+      throw new UnauthorizedException();
+    }
 
     const payload = {
       id: id,
@@ -23,6 +33,9 @@ export class AuthService {
     };
 
     return {
+      id: id,
+      name: _name,
+      email: _email,
       access_token: await this.jwtService.signAsync(payload),
     };
   }
