@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import { createCipheriv, randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
-import { LoginDto, SignUpDto, SignUpEncryptedDto } from './dtos/auth.dto';
+import { LoginDto, SignUpDto } from './dtos/auth.dto';
 import { jwtConstants } from './constants/secret';
 
 @Injectable()
@@ -28,6 +28,7 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
+    //O email estará criptografado no JWT Acess_Token, o que permitirá, portanto, que o JWT seja descriptografado e o e-mail seja revalidado para gerar um Refresh_Token
     const payload = {
       id: id,
       email: _email,
@@ -44,7 +45,21 @@ export class AuthService {
   async signUp({
     password,
     ...rest
-  }: { password: Buffer } & SignUpDto): Promise<Partial<User>> {
+  }: { password: string } & SignUpDto): Promise<Partial<User>> {
+    const encryptedUser: SignUpDto = {
+      ...rest,
+      password: await this.encryptPassword(password),
+    };
+
+    const { name, email } = await this.usersService.create(encryptedUser);
+
+    return {
+      name: name,
+      email: email,
+    };
+  }
+
+  private async encryptPassword(password: string): Promise<string> {
     const iv = randomBytes(16);
 
     const secret = jwtConstants.secret;
@@ -56,16 +71,7 @@ export class AuthService {
       cipher.final(),
     ]);
 
-    const encryptedUser: SignUpEncryptedDto = {
-      ...rest,
-      password: encryptedText.toString('base64'),
-    };
-
-    const { name, email } = await this.usersService.create(encryptedUser);
-
-    return {
-      name: name,
-      email: email,
-    };
+    const passwordConvertedToBase64 = encryptedText.toString('base64');
+    return passwordConvertedToBase64;
   }
 }

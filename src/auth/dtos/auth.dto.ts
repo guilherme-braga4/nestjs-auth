@@ -6,11 +6,5 @@ export class LoginDto {
 export class SignUpDto {
   name: string;
   email: string;
-  password: Buffer;
-}
-
-export class SignUpEncryptedDto {
-  name: string;
-  email: string;
   password: string;
 }
