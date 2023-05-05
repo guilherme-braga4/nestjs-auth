@@ -15,6 +15,7 @@ export class AuthService {
   ) {}
 
   async signIn({ email, password }: LoginDto): Promise<any> {
+    //Add trativas de erro, incluindo a tratativa de usuário não encontrado
     const {
       id,
       name: _name,
@@ -57,7 +58,7 @@ export class AuthService {
 
     const encryptedUser: SignUpEncryptedDto = {
       ...rest,
-      password: encryptedText,
+      password: encryptedText.toString('base64'),
     };
 
     const { name, email } = await this.usersService.create(encryptedUser);

@@ -1,6 +1,6 @@
 export class LoginDto {
   email: string;
-  password: Buffer;
+  password: string;
 }
 
 export class SignUpDto {
@@ -12,5 +12,5 @@ export class SignUpDto {
 export class SignUpEncryptedDto {
   name: string;
   email: string;
-  password: Buffer;
+  password: string;
 }
