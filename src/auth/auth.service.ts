@@ -47,7 +47,11 @@ export class AuthService {
       password: encryptedText,
     };
 
-    const createdUser = await this.usersService.create(encryptedUser);
-    return createdUser;
+    const { name, email } = await this.usersService.create(encryptedUser);
+
+    return {
+      name: name,
+      email: email,
+    };
   }
 }
