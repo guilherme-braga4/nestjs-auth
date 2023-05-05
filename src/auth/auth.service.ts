@@ -5,7 +5,7 @@ import { User } from '@prisma/client';
 import { createCipheriv, randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
 import { LoginDto, SignUpDto } from './dtos/auth.dto';
-import { jwtConstants } from './constants/secret';
+import { jwtConstants, passwordConstants } from './constants/secret';
 
 @Injectable()
 export class AuthService {
@@ -28,17 +28,17 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-    //O email estará criptografado no JWT Acess_Token, o que permitirá, portanto, que o JWT seja descriptografado e o e-mail seja revalidado para gerar um Refresh_Token
     const payload = {
       id: id,
       email: _email,
     };
 
+    //O email estará criptografado no JWT Acess_Token, o que permitirá, portanto, que o JWT seja descriptografado e o e-mail seja revalidado para gerar um Refresh_Token
+    const authenticatedUser = await this.generateToken(payload);
+
     return {
-      id: id,
       name: _name,
-      email: _email,
-      access_token: await this.jwtService.signAsync(payload),
+      ...authenticatedUser,
     };
   }
 
@@ -62,7 +62,7 @@ export class AuthService {
   private async encryptPassword(password: string): Promise<string> {
     const iv = randomBytes(16);
 
-    const secret = jwtConstants.secret;
+    const secret = passwordConstants.secret;
     const key = (await promisify(scrypt)(secret, 'salt', 32)) as Buffer;
     const cipher = createCipheriv('aes-256-ctr', key, iv);
 
@@ -73,5 +73,21 @@ export class AuthService {
 
     const passwordConvertedToBase64 = encryptedText.toString('base64');
     return passwordConvertedToBase64;
+  }
+
+  async generateToken(payload: Partial<LoginDto>) {
+    const accessToken = await this.jwtService.signAsync(payload, {});
+
+    const refreshToken = await this.jwtService.signAsync(payload, {
+      expiresIn: '2h',
+      secret: jwtConstants.secret_refresh,
+    });
+
+    return {
+      id: payload.id,
+      email: payload.email,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
   }
 }
