@@ -1,10 +1,19 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import { createCipheriv, randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
-import { LoginDto, SignUpDto } from './dtos/auth.dto';
+import {
+  LoginDto,
+  SignUpDto,
+  AuthenticatedUser,
+  UserDto,
+} from './dtos/auth.dto';
 import { jwtConstants, passwordConstants } from './constants/secret';
 
 @Injectable()
@@ -14,7 +23,10 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async signIn({ email, password }: LoginDto): Promise<any> {
+  async signIn({
+    email,
+    password,
+  }: LoginDto): Promise<Partial<AuthenticatedUser>> {
     //Add trativas de erro, incluindo a tratativa de usuário não encontrado
     const {
       id,
@@ -45,7 +57,7 @@ export class AuthService {
   async signUp({
     password,
     ...rest
-  }: { password: string } & SignUpDto): Promise<Partial<User>> {
+  }: { password: string } & SignUpDto): Promise<Partial<SignUpDto>> {
     const encryptedUser: SignUpDto = {
       ...rest,
       password: await this.encryptPassword(password),
@@ -75,8 +87,10 @@ export class AuthService {
     return passwordConvertedToBase64;
   }
 
-  async generateToken(payload: Partial<LoginDto>) {
-    const accessToken = await this.jwtService.signAsync(payload, {});
+  async generateToken(
+    payload: Partial<AuthenticatedUser>,
+  ): Promise<Partial<AuthenticatedUser>> {
+    const accessToken = await this.jwtService.signAsync(payload);
 
     const refreshToken = await this.jwtService.signAsync(payload, {
       expiresIn: '2h',
@@ -86,8 +100,45 @@ export class AuthService {
     return {
       id: payload.id,
       email: payload.email,
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
     };
+  }
+
+  async reauthenticateSession({ refreshToken }: any): Promise<any> {
+    //1 - (SEGURANÇA) Validar SE o Token recebido existe
+    const payload = await this.validateRefreshToken(refreshToken);
+
+    //2 - Gerar um novo Token
+    return await this.generateToken(payload);
+  }
+
+  private async validateRefreshToken(refreshToken: string): Promise<UserDto> {
+    if (!refreshToken) {
+      throw new NotFoundException('This token seems to not belongs any user');
+    }
+
+    const email = this.jwtService.decode(refreshToken)['email'];
+
+    const user = await this.usersService.findOne(email);
+
+    if (!user) {
+      throw new NotFoundException('User not founded');
+    }
+
+    try {
+      this.jwtService.verify(refreshToken, {
+        secret: jwtConstants.secret_refresh,
+      });
+      return user;
+    } catch (err) {
+      if (err.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Invalid Signature');
+      }
+      if (err.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Expired Token');
+      }
+      throw new UnauthorizedException(err.name);
+    }
   }
 }
