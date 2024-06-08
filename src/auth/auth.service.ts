@@ -1,23 +1,25 @@
 import {
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { User } from '@prisma/client';
-import { createCipheriv, randomBytes, scrypt } from 'crypto';
-import { promisify } from 'util';
 import {
   LoginDto,
   SignUpDto,
   AuthenticatedUser,
   UserDto,
 } from './dtos/auth.dto';
-import { jwtConstants, passwordConstants } from './constants/secret';
+import { jwtConstants } from './constants/secret';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
+  private readonly saltOrRounds = 10;
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -27,64 +29,45 @@ export class AuthService {
     email,
     password,
   }: LoginDto): Promise<Partial<AuthenticatedUser>> {
-    //Add trativas de erro, incluindo a tratativa de usuário não encontrado
-    const {
-      id,
-      name: _name,
-      email: _email,
-      password: _password,
-    } = await this.usersService.findOne(email);
+    const { password: _password, ...rest } =
+      (await this.usersService.findOne(email)) ?? {};
 
-    //Compara as senha criptografada recebida com a senha criptografada do DB
-    if (password !== _password) {
-      throw new UnauthorizedException();
+    if (!_password) {
+      throw new HttpException(
+        `It's seems that you're new here :/`,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const isUserAuthenticated = await this.comparePassword(password, _password);
+    if (!isUserAuthenticated) {
+      throw new HttpException(
+        `Ops, i don't know you! :(`,
+        HttpStatus.FORBIDDEN,
+      );
     }
 
-    const payload = {
-      id: id,
-      email: _email,
-    };
+    const authenticatedUser = await this.generateToken(rest);
 
-    //O email estará criptografado no JWT Acess_Token, o que permitirá, portanto, que o JWT seja descriptografado e o e-mail seja revalidado para gerar um Refresh_Token
-    const authenticatedUser = await this.generateToken(payload);
-
-    return {
-      name: _name,
-      ...authenticatedUser,
-    };
+    return authenticatedUser;
   }
 
   async signUp({
     password,
     ...rest
   }: { password: string } & SignUpDto): Promise<Partial<SignUpDto>> {
-    const encryptedUser: SignUpDto = {
+    const hashPassword = await this.hashPassword(password);
+
+    const userPayload: SignUpDto = {
       ...rest,
-      password: await this.encryptPassword(password),
+      password: hashPassword,
     };
 
-    const { name, email } = await this.usersService.create(encryptedUser);
+    const { name, email } = await this.usersService.create(userPayload);
 
     return {
       name: name,
       email: email,
     };
-  }
-
-  private async encryptPassword(password: string): Promise<string> {
-    const iv = randomBytes(16);
-
-    const secret = passwordConstants.secret;
-    const key = (await promisify(scrypt)(secret, 'salt', 32)) as Buffer;
-    const cipher = createCipheriv('aes-256-ctr', key, iv);
-
-    const encryptedText = Buffer.concat([
-      cipher.update(password),
-      cipher.final(),
-    ]);
-
-    const passwordConvertedToBase64 = encryptedText.toString('base64');
-    return passwordConvertedToBase64;
   }
 
   async generateToken(
@@ -140,5 +123,16 @@ export class AuthService {
       }
       throw new UnauthorizedException(err.name);
     }
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    return await bcrypt.hash(password, this.saltOrRounds);
+  }
+
+  async comparePassword(
+    stringPassword: string,
+    hashPassword: string,
+  ): Promise<boolean> {
+    return await bcrypt.compare(stringPassword, hashPassword);
   }
 }
